@@ -5,7 +5,10 @@ import string
 # import lark - available if you need it!
 
 
-def match_pattern(input_line, pattern):
+def match_pattern(input_line: str, pattern: str):
+    if pattern.startswith("[") and pattern.endswith("]"):
+        chars = pattern.strip("[]")
+        return any(c in input_line for c in chars)
     if pattern == "\\d":
         digits = string.digits
         return any(d in input_line for d in digits)
