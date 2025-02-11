@@ -1,4 +1,5 @@
 import sys
+import string
 
 # import pyparsing - available if you need it!
 # import lark - available if you need it!
@@ -6,8 +7,11 @@ import sys
 
 def match_pattern(input_line, pattern):
     if pattern == "\\d":
-        digits = (str(n) for n in range(0, 9))
+        digits = string.digits
         return any(d in input_line for d in digits)
+    if pattern == "\\w":
+        alphanumerics = string.digits + string.ascii_letters
+        return any(a in input_line for a in alphanumerics)
     if len(pattern) == 1:
         return pattern in input_line
     else:
