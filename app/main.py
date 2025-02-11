@@ -8,7 +8,13 @@ import string
 def match_pattern(input_line: str, pattern: str):
     if pattern.startswith("[") and pattern.endswith("]"):
         chars = pattern.strip("[]")
-        return any(c in input_line for c in chars)
+        if chars.startswith("^"):
+            # Negative characters group
+            chars = pattern.strip("^")
+            return all(c not in input_line for c in chars)
+        else:
+            # Positive character group
+            return any(c in input_line for c in chars)
     if pattern == "\\d":
         digits = string.digits
         return any(d in input_line for d in digits)
