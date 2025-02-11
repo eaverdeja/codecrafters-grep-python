@@ -5,6 +5,9 @@ import sys
 
 
 def match_pattern(input_line, pattern):
+    if pattern == "\\d":
+        digits = (str(n) for n in range(0, 9))
+        return any(d in input_line for d in digits)
     if len(pattern) == 1:
         return pattern in input_line
     else:
