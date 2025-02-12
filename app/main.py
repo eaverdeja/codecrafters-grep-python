@@ -6,6 +6,17 @@ import string
 
 
 def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
+    if pattern.startswith("^"):
+        # Start of string anchor
+        pattern = pattern.strip("^")
+        # Literal match
+        match = text == pattern[0]
+        if match:
+            return True, pattern[1:]
+        # If there's no match at the start, then short-circuit
+        # the operation by returning an empty pattern
+        return False, ""
+
     if pattern.startswith("[") and pattern.endswith("]"):
         rest_of_pattern = pattern[pattern.index("]") + 1 :]
 
@@ -19,6 +30,7 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
             return any(c == text for c in chars), rest_of_pattern
 
     if pattern.startswith(r"\d"):
+        # Digits character class
         digits = string.digits
         match = any(d == text for d in digits)
         if match:
@@ -26,6 +38,7 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
         return False, pattern
 
     if pattern.startswith(r"\w"):
+        # Words character class
         alphanumerics = string.digits + string.ascii_letters
         match = any(a == text for a in alphanumerics)
         if match:
@@ -34,8 +47,9 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
 
     # Literal character
     match = text == pattern[0]
-    remaining_pattern = pattern[1:]
-    return match, remaining_pattern
+    if match:
+        return True, pattern[1:]
+    return False, pattern
 
 
 def match_pattern(text: str, pattern: str) -> bool:
