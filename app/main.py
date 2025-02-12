@@ -5,7 +5,7 @@ import string
 # import lark - available if you need it!
 
 
-def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
+def match_at_pos(text: str, pattern: str, is_quantified: bool) -> tuple[bool, str]:
     if pattern.startswith("^"):
         # Start of string anchor
         pattern = pattern.lstrip("^")
@@ -46,6 +46,14 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
             return True, pattern.replace(r"\w", "", 1)
         return False, pattern
 
+    if is_quantified:
+        # One or more quantifier (+)
+        quantified = pattern[0]
+        match = text == quantified
+        if match:
+            return True, pattern[2:]
+        return False, pattern[1:]
+
     # Literal character
     match = text == pattern[0]
     if match:
@@ -69,7 +77,13 @@ def match_pattern(text: str, pattern: str) -> bool:
         except IndexError:
             text_at_pos = ""
 
-        match, pattern = match_at_pos(text_at_pos, pattern)
+        try:
+            text_at_pattern = pattern.index(text_at_pos)
+            is_quantified = pattern[text_at_pattern + 1] == "+"
+        except (ValueError, IndexError):
+            is_quantified = False
+
+        match, pattern = match_at_pos(text_at_pos, pattern, is_quantified)
 
         if pattern:
             # If there's still a pattern to consume
