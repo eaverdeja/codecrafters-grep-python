@@ -5,10 +5,10 @@ import string
 # import lark - available if you need it!
 
 
-def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
+def match_at_pos(text: str, pattern: str, is_end_of_text: bool) -> tuple[bool, str]:
     if pattern.startswith("^"):
         # Start of string anchor
-        pattern = pattern.strip("^")
+        pattern = pattern.lstrip("^")
         # Literal match
         match = text == pattern[0]
         if match:
@@ -18,6 +18,7 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
         return False, ""
 
     if pattern.startswith("[") and pattern.endswith("]"):
+        # Character groups
         rest_of_pattern = pattern[pattern.index("]") + 1 :]
 
         chars = pattern.strip("[]")
@@ -45,6 +46,12 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
             return True, pattern.replace(r"\w", "", 1)
         return False, pattern
 
+    if pattern[0] == "$":
+        # End of string anchor
+        if not is_end_of_text:
+            return False, ""
+        return True, ""
+
     # Literal character
     match = text == pattern[0]
     if match:
@@ -55,9 +62,16 @@ def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
 def match_pattern(text: str, pattern: str) -> bool:
     pos = 0
     match = False
-    while pos < len(text):
-        match, pattern = match_at_pos(text[pos], pattern)
-        pos += 1
+    is_end_of_text = False
+    while True:
+        try:
+            text_at_pos = text[pos]
+        except IndexError:
+            is_end_of_text = True
+            text_at_pos = ""
+
+        match, pattern = match_at_pos(text_at_pos, pattern, is_end_of_text)
+
         if pattern:
             # If there's still a pattern to consume
             # it means we don't have a match yet
@@ -66,6 +80,9 @@ def match_pattern(text: str, pattern: str) -> bool:
             # Else there's nothing more to check
             break
 
+        if pos > len(text):
+            break
+        pos += 1
     return match
 
 
