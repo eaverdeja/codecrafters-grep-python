@@ -5,40 +5,71 @@ import string
 # import lark - available if you need it!
 
 
-def match_pattern(input_line: str, pattern: str):
+def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
     if pattern.startswith("[") and pattern.endswith("]"):
+        end_of_group = pattern.index("]")
+        rest_of_pattern = pattern[end_of_group + 1 :]
+
         chars = pattern.strip("[]")
         if chars.startswith("^"):
             # Negative characters group
-            chars = pattern.strip("^")
-            return all(c not in input_line for c in chars)
+            chars = chars.strip("^")
+            return all(c != text for c in chars), rest_of_pattern
         else:
             # Positive character group
-            return any(c in input_line for c in chars)
-    if pattern == "\\d":
+            return any(c == text for c in chars), rest_of_pattern
+    if pattern.startswith("\\d"):
         digits = string.digits
-        return any(d in input_line for d in digits)
-    if pattern == "\\w":
+        match = any(d == text for d in digits)
+        if match:
+            return True, pattern.replace("\\d", "", 1)
+        return False, pattern
+    if pattern.startswith("\\w"):
         alphanumerics = string.digits + string.ascii_letters
-        return any(a in input_line for a in alphanumerics)
-    if len(pattern) == 1:
-        return pattern in input_line
-    else:
-        raise RuntimeError(f"Unhandled pattern: {pattern}")
+        match = any(a == text for a in alphanumerics)
+        if match:
+            return True, pattern.replace("\\w", "", 1)
+        return False, pattern
+
+    # Literal character
+    match = text == pattern[0]
+    if match:
+        return True, pattern[1:]
+    return False, pattern[1:]
+
+
+def match_pattern(text: str, pattern: str) -> bool:
+    pos = 0
+    match = False
+    while pos < len(text):
+        match, pattern = match_at_pos(text[pos], pattern)
+        if pattern:
+            # If there's still a pattern to consume
+            # it means we don't have a match yet
+            match = False
+        else:
+            break
+        pos += 1
+
+    return match
 
 
 def main():
-    pattern = sys.argv[2]
-    input_line = sys.stdin.read()
-
     if sys.argv[1] != "-E":
         print("Expected first argument to be '-E'")
         exit(1)
 
-    if match_pattern(input_line, pattern):
-        exit(0)
-    else:
+    pattern = sys.argv[2]
+    text = sys.stdin.read()
+
+    match = match_pattern(text, pattern)
+
+    if not match:
+        print("not found!")
         exit(1)
+    else:
+        print("found!")
+        exit(0)
 
 
 if __name__ == "__main__":
