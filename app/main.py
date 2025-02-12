@@ -5,7 +5,7 @@ import string
 # import lark - available if you need it!
 
 
-def match_at_pos(text: str, pattern: str, is_end_of_text: bool) -> tuple[bool, str]:
+def match_at_pos(text: str, pattern: str) -> tuple[bool, str]:
     if pattern.startswith("^"):
         # Start of string anchor
         pattern = pattern.lstrip("^")
@@ -46,12 +46,6 @@ def match_at_pos(text: str, pattern: str, is_end_of_text: bool) -> tuple[bool, s
             return True, pattern.replace(r"\w", "", 1)
         return False, pattern
 
-    if pattern[0] == "$":
-        # End of string anchor
-        if not is_end_of_text:
-            return False, ""
-        return True, ""
-
     # Literal character
     match = text == pattern[0]
     if match:
@@ -62,15 +56,20 @@ def match_at_pos(text: str, pattern: str, is_end_of_text: bool) -> tuple[bool, s
 def match_pattern(text: str, pattern: str) -> bool:
     pos = 0
     match = False
-    is_end_of_text = False
+
+    if pattern.endswith("$"):
+        # End of string anchor
+        # Reverse operation of start of string anchor
+        pattern = pattern.replace("$", "^")[::-1]
+        text = text[::-1]
+
     while True:
         try:
             text_at_pos = text[pos]
         except IndexError:
-            is_end_of_text = True
             text_at_pos = ""
 
-        match, pattern = match_at_pos(text_at_pos, pattern, is_end_of_text)
+        match, pattern = match_at_pos(text_at_pos, pattern)
 
         if pattern:
             # If there's still a pattern to consume
