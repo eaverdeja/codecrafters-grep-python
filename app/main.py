@@ -5,17 +5,20 @@ import string
 # import lark - available if you need it!
 
 
-def match_at_pos(text: str, pattern: str, is_quantified: bool) -> tuple[bool, str]:
+def match_at_pos(
+    text: str, pattern: str, quantifier: str | None, occurrences: int
+) -> tuple[bool, str, int]:
+    print(text, pattern, quantifier, occurrences)
     if pattern.startswith("^"):
         # Start of string anchor
         pattern = pattern.lstrip("^")
         # Literal match
         match = text == pattern[0]
         if match:
-            return True, pattern[1:]
+            return True, pattern[1:], occurrences
         # If there's no match at the start, then short-circuit
         # the operation by returning an empty pattern
-        return False, ""
+        return False, "", occurrences
 
     if pattern.startswith("[") and pattern.endswith("]"):
         # Character groups
@@ -25,44 +28,49 @@ def match_at_pos(text: str, pattern: str, is_quantified: bool) -> tuple[bool, st
         if chars.startswith("^"):
             # Negative characters group
             chars = chars.strip("^")
-            return all(c != text for c in chars), rest_of_pattern
+            return all(c != text for c in chars), rest_of_pattern, occurrences
         else:
             # Positive character group
-            return any(c == text for c in chars), rest_of_pattern
+            return any(c == text for c in chars), rest_of_pattern, occurrences
 
     if pattern.startswith(r"\d"):
         # Digits character class
         digits = string.digits
         match = any(d == text for d in digits)
         if match:
-            return True, pattern.replace(r"\d", "", 1)
-        return False, pattern
+            return True, pattern.replace(r"\d", "", 1), occurrences
+        return False, pattern, occurrences
 
     if pattern.startswith(r"\w"):
         # Words character class
         alphanumerics = string.digits + string.ascii_letters
         match = any(a == text for a in alphanumerics)
         if match:
-            return True, pattern.replace(r"\w", "", 1)
-        return False, pattern
+            return True, pattern.replace(r"\w", "", 1), occurrences
+        return False, pattern, occurrences
 
-    if is_quantified:
-        # One or more quantifier (+)
+    if quantifier:
         quantified = pattern[0]
-        match = text == quantified
+        if quantifier == "+":
+            # One or more quantifier (+)
+            match = text == quantified
+        elif quantifier == "?":
+            match = True if occurrences == 0 else text == quantified
         if match:
-            return True, pattern[2:]
-        return False, pattern[1:]
+            occurrences += 1
+            return True, pattern[2:], occurrences
+        return False, pattern[1:], occurrences
 
     # Literal character
     match = text == pattern[0]
     if match:
-        return True, pattern[1:]
-    return False, pattern
+        return True, pattern[1:], occurrences
+    return False, pattern, occurrences
 
 
 def match_pattern(text: str, pattern: str) -> bool:
     pos = 0
+    occurrences = 0
     match = False
 
     if pattern.endswith("$"):
@@ -77,13 +85,21 @@ def match_pattern(text: str, pattern: str) -> bool:
         except IndexError:
             text_at_pos = ""
 
-        try:
-            text_at_pattern = pattern.index(text_at_pos)
-            is_quantified = pattern[text_at_pattern + 1] == "+"
-        except (ValueError, IndexError):
-            is_quantified = False
+        quantifier = None
+        if pattern[1] in ("?", "+"):
+            try:
+                text_at_pattern = pattern.index(text_at_pos)
+                quantifier = (
+                    pattern[text_at_pattern + 1]
+                    if pattern[text_at_pattern + 1] in ("?", "+")
+                    else None
+                )
+            except (ValueError, IndexError):
+                pass
 
-        match, pattern = match_at_pos(text_at_pos, pattern, is_quantified)
+        match, pattern, occurrences = match_at_pos(
+            text_at_pos, pattern, quantifier, occurrences
+        )
 
         if pattern:
             # If there's still a pattern to consume
