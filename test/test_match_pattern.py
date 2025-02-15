@@ -59,6 +59,12 @@ class TestMatch:
             ("bat", "[cd]at", False),
             ("cat", "[^cd]at", False),
             ("bat", "[^cd]at", True),
+            #
+            # # Wildcards (.)
+            ("cat", "c.t", True),
+            ("goøö0Ogol", "g.+gol", True),
+            ("car", "c.t", False),
+            ("gol", "g.+gol", False),
         ],
     )
     def test_matches(self, text, pattern, is_match):

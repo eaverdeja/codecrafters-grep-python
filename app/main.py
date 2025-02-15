@@ -25,6 +25,9 @@ class Matcher:
         if self._quantifier:
             return self._handle_quantifiers(text)
 
+        if self.pattern.startswith("."):
+            return self._handle_wildcard()
+
         # Literal character
         match = text == self.pattern[0] if self.pattern else False
         if match:
@@ -96,7 +99,8 @@ class Matcher:
         quantified = self.pattern[0]
         if self._quantifier == "+":
             # One or more quantifier (+)
-            if not text == quantified:
+            if text != quantified:
+
                 if self.occurrences >= 0:
                     if text == self.pattern[2]:
                         self.pattern = self.pattern[3:]
@@ -104,7 +108,7 @@ class Matcher:
                     self.pattern = ""
                     return False
                 self.occurrences = -1
-                self.pattern = self.pattern[1:]
+                self.pattern = self.pattern[2:]
                 return False
             self.occurrences = max(1, self.occurrences + 1)
             return True
@@ -139,6 +143,11 @@ class Matcher:
             return False
         end_portion = text[-len(self.pattern) :]
         return Matcher(f"^{self.pattern}").match(end_portion)
+
+    def _handle_wildcard(self) -> bool:
+        # Anything goes!
+        self.pattern = self.pattern[1:]
+        return True
 
     def match(self, text: str) -> bool:
         # Keep track of anchors
