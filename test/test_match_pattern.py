@@ -1,6 +1,6 @@
 import pytest
 
-from app.main import match_pattern
+from app.main import Matcher
 
 
 class TestMatchPattern:
@@ -40,6 +40,7 @@ class TestMatchPattern:
             # # One or more quantifier
             ("caaats", "ca+ts", True),
             ("cat", "ca+t", True),
+            ("caabats", "ca+ts", False),
             ("act", "ca+t", False),
             ("ca", "ca+t", False),
             #
@@ -61,4 +62,4 @@ class TestMatchPattern:
         ],
     )
     def test_matches(self, text, pattern, is_match):
-        assert match_pattern(text, pattern) is is_match
+        assert Matcher().match_pattern(text, pattern) is is_match
