@@ -5,9 +5,18 @@ import string
 # import lark - available if you need it!
 
 
-def match_at_pos(
+def _match_at_pos(
     text: str, pattern: str, quantifier: str | None, occurrences: int
 ) -> tuple[bool, str, int]:
+    if not text:
+        if not pattern:
+            return True, "", occurrences
+        if pattern.endswith("?"):
+            return True, pattern[2:], occurrences
+        elif pattern.endswith("+"):
+            return occurrences >= 0, pattern[2:], occurrences
+        return False, pattern, occurrences
+
     if pattern.startswith("^"):
         # Start of string anchor
         pattern = pattern.lstrip("^")
@@ -19,33 +28,45 @@ def match_at_pos(
         # the operation by returning an empty pattern
         return False, "", occurrences
 
-    if pattern.startswith("[") and pattern.endswith("]"):
+    if pattern.find("[") >= 0 and pattern.find("]"):
         # Character groups
         rest_of_pattern = pattern[pattern.index("]") + 1 :]
 
-        chars = pattern.strip("[]")
+        chars = pattern[pattern.index("[") + 1 : pattern.index("]")]
         if chars.startswith("^"):
             # Negative characters group
             chars = chars.strip("^")
-            return all(c != text for c in chars), rest_of_pattern, occurrences
+            match = text not in chars
         else:
             # Positive character group
-            return any(c == text for c in chars), rest_of_pattern, occurrences
+            match = text in chars
+        return (
+            (True, rest_of_pattern, occurrences) if match else (False, "", occurrences)
+        )
 
-    if pattern.startswith(r"\d"):
-        # Digits character class
-        digits = string.digits
-        match = any(d == text for d in digits)
-        if match:
-            return True, pattern.replace(r"\d", "", 1), occurrences
-        return False, pattern, occurrences
+    # Character classes
+    if pattern.startswith(r"\d") or pattern.startswith(r"\w"):
+        is_digit = pattern.startswith(r"\d")
+        valid_chars = (
+            string.digits if is_digit else (string.digits + string.ascii_letters)
+        )
+        character_class = r"\d" if is_digit else r"\w"
+        match = text in valid_chars
 
-    if pattern.startswith(r"\w"):
-        # Words character class
-        alphanumerics = string.digits + string.ascii_letters
-        match = any(a == text for a in alphanumerics)
+        if quantifier == "+":
+            if not match:
+                if occurrences > 0:
+                    return True, pattern.replace(character_class, ""), -1
+                return False, pattern, -1
+            occurrences = max(1, occurrences + 1)
+            return True, pattern, occurrences
+        elif quantifier == "?":
+            if match:
+                return True, pattern.replace(character_class, "", 1), 1
+            return True, pattern.replace(character_class, "", 1), 0
+
         if match:
-            return True, pattern.replace(r"\w", "", 1), occurrences
+            return True, pattern.replace(character_class, "", 1), occurrences
         return False, pattern, occurrences
 
     if quantifier and text:
@@ -75,11 +96,34 @@ def match_pattern(text: str, pattern: str) -> bool:
     pos = 0
     occurrences = -1
 
-    if pattern.endswith("$"):
-        # End of string anchor
-        # Reverse operation of start of string anchor
-        pattern = pattern.replace("$", "^")[::-1]
-        text = text[::-1]
+    # Keep track of anchors
+    has_start_anchor = pattern.startswith("^")
+    has_end_anchor = pattern.endswith("$")
+
+    # And strip them for processing
+    pattern = pattern.strip("^$")
+
+    if has_start_anchor:
+        for i in range(len(pattern)):
+            if i >= len(text):
+                return False
+
+            quantifier = _get_quantifier(pattern)
+            match, new_pattern, new_occurrences = _match_at_pos(
+                text[i], pattern[i:], quantifier, occurrences
+            )
+            if not match:
+                return False
+        if not has_end_anchor:
+            return True
+        return len(text) == len(pattern)
+
+    # Flip things around if there's just an end anchor
+    if has_end_anchor and not has_start_anchor:
+        if len(text) < len(pattern):
+            return False
+        end_portion = text[-len(pattern) :]
+        return match_pattern(end_portion, f"^{pattern}")
 
     while True:
         try:
@@ -87,11 +131,8 @@ def match_pattern(text: str, pattern: str) -> bool:
         except IndexError:
             text_at_pos = ""
 
-        quantifier = (
-            pattern[1] if len(pattern) > 1 and pattern[1] in ("+", "?") else None
-        )
-
-        match, new_pattern, new_occurrences = match_at_pos(
+        quantifier = _get_quantifier(pattern)
+        match, new_pattern, new_occurrences = _match_at_pos(
             text_at_pos, pattern, quantifier, occurrences
         )
 
@@ -118,6 +159,13 @@ def match_pattern(text: str, pattern: str) -> bool:
         if pos > len(text):
             break
     return match
+
+
+def _get_quantifier(pattern: str) -> str | None:
+    if pattern.startswith(r"\d") or pattern.startswith(r"\w"):
+        # There's an extra backslash used to escape in this case, remove it
+        pattern = pattern[1:]
+    return pattern[1] if len(pattern) > 1 and pattern[1] in ("+", "?") else None
 
 
 def main():

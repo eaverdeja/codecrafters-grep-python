@@ -44,6 +44,21 @@ class TestMatchPattern:
                 ("act", "ca+t", False),
                 ("ca", "ca+t", False),
                 #
+                # # Character classes (\d, \w)
+                ("a1b", r"\d", True),
+                ("abc", r"\d", False),
+                ("123", r"\d+", True),
+                ("a1b", r"\w+", True),
+                ("!@#", r"\w", False),
+                ("!@#", r"\w?", True),
+                #
+                # # Character groups []
+                ("a", "[abcd]", True),
+                ("cat", "[cd]at", True),
+                ("dat", "[cd]at", True),
+                ("bat", "[cd]at", False),
+                ("cat", "[^cd]at", False),
+                ("bat", "[^cd]at", True),
             ],
         )
         def test_matches(self, text, pattern, is_match):
