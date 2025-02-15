@@ -4,92 +4,113 @@ import string
 # import pyparsing - available if you need it!
 # import lark - available if you need it!
 
+MatchResult = tuple[bool, str, int]
+
 
 def _match_at_pos(
     text: str, pattern: str, quantifier: str | None, occurrences: int
-) -> tuple[bool, str, int]:
+) -> MatchResult:
     if not text:
-        if not pattern:
-            return True, "", occurrences
-        if pattern.endswith("?"):
-            return True, pattern[2:], occurrences
-        elif pattern.endswith("+"):
-            return occurrences >= 0, pattern[2:], occurrences
-        return False, pattern, occurrences
+        return _handle_empty_text(pattern, occurrences)
 
     if pattern.startswith("^"):
-        # Start of string anchor
-        pattern = pattern.lstrip("^")
-        # Literal match
-        match = text == pattern[0]
-        if match:
-            return True, pattern[1:], occurrences
-        # If there's no match at the start, then short-circuit
-        # the operation by returning an empty pattern
-        return False, "", occurrences
+        return _handle_start_of_string_anchor(text, pattern, occurrences)
 
     if pattern.find("[") >= 0 and pattern.find("]"):
-        # Character groups
-        rest_of_pattern = pattern[pattern.index("]") + 1 :]
+        return _handle_character_groups(text, pattern, occurrences)
 
-        chars = pattern[pattern.index("[") + 1 : pattern.index("]")]
-        if chars.startswith("^"):
-            # Negative characters group
-            chars = chars.strip("^")
-            match = text not in chars
-        else:
-            # Positive character group
-            match = text in chars
-        return (
-            (True, rest_of_pattern, occurrences) if match else (False, "", occurrences)
-        )
-
-    # Character classes
     if pattern.startswith(r"\d") or pattern.startswith(r"\w"):
-        is_digit = pattern.startswith(r"\d")
-        valid_chars = (
-            string.digits if is_digit else (string.digits + string.ascii_letters)
-        )
-        character_class = r"\d" if is_digit else r"\w"
-        match = text in valid_chars
+        return _handle_character_classes(text, pattern, quantifier, occurrences)
 
-        if quantifier == "+":
-            if not match:
-                if occurrences > 0:
-                    return True, pattern.replace(character_class, ""), -1
-                return False, pattern, -1
-            occurrences = max(1, occurrences + 1)
-            return True, pattern, occurrences
-        elif quantifier == "?":
-            if match:
-                return True, pattern.replace(character_class, "", 1), 1
-            return True, pattern.replace(character_class, "", 1), 0
-
-        if match:
-            return True, pattern.replace(character_class, "", 1), occurrences
-        return False, pattern, occurrences
-
-    if quantifier and text:
-        quantified = pattern[0]
-
-        if quantifier == "+":
-            # One or more quantifier (+)
-            if not text == quantified:
-                if occurrences > 0:
-                    return text == pattern[2], pattern[3:], -1
-                return False, pattern, -1
-            occurrences = max(1, occurrences + 1)
-            return True, pattern, occurrences
-        elif quantifier == "?":
-            # Zero or more quantifier (?)
-            if text == quantified:
-                return True, pattern[2:], 1
-            return text == pattern[2], pattern[3:], 0
+    if quantifier:
+        return _handle_quantifiers(text, pattern, quantifier, occurrences)
 
     # Literal character
     match = text == pattern[0] if pattern else False
-
     return (True, pattern[1:], occurrences) if match else (False, pattern, occurrences)
+
+
+def _handle_empty_text(pattern: str, occurrences: int) -> MatchResult:
+    if not pattern:
+        return True, "", occurrences
+    if pattern.endswith("?"):
+        return True, pattern[2:], occurrences
+    elif pattern.endswith("+"):
+        return occurrences >= 0, pattern[2:], occurrences
+    return False, pattern, occurrences
+
+
+def _handle_start_of_string_anchor(
+    text: str, pattern: str, occurrences: int
+) -> MatchResult:
+    pattern = pattern.lstrip("^")
+    # Literal match
+    match = text == pattern[0]
+    if match:
+        return True, pattern[1:], occurrences
+    # If there's no match at the start, then short-circuit
+    # the operation by returning an empty pattern
+    return False, "", occurrences
+
+
+def _handle_character_groups(text: str, pattern: str, occurrences: int) -> MatchResult:
+    rest_of_pattern = pattern[pattern.index("]") + 1 :]
+
+    chars = pattern[pattern.index("[") + 1 : pattern.index("]")]
+    if chars.startswith("^"):
+        # Negative characters group
+        chars = chars.strip("^")
+        match = text not in chars
+    else:
+        # Positive character group
+        match = text in chars
+    return (True, rest_of_pattern, occurrences) if match else (False, "", occurrences)
+
+
+def _handle_character_classes(
+    text: str, pattern: str, quantifier: str | None, occurrences: int
+) -> MatchResult:
+    is_digit = pattern.startswith(r"\d")
+    valid_chars = string.digits if is_digit else (string.digits + string.ascii_letters)
+    character_class = r"\d" if is_digit else r"\w"
+    match = text in valid_chars
+
+    if quantifier == "+":
+        if not match:
+            if occurrences > 0:
+                return True, pattern.replace(character_class, ""), -1
+            return False, pattern, -1
+        occurrences = max(1, occurrences + 1)
+        return True, pattern, occurrences
+    elif quantifier == "?":
+        if match:
+            return True, pattern.replace(character_class, "", 1), 1
+        return True, pattern.replace(character_class, "", 1), 0
+
+    if match:
+        return True, pattern.replace(character_class, "", 1), occurrences
+    return False, pattern, occurrences
+
+
+def _handle_quantifiers(
+    text: str, pattern: str, quantifier: str | None, occurrences: int
+) -> MatchResult:
+    quantified = pattern[0]
+    if quantifier == "+":
+        # One or more quantifier (+)
+        if not text == quantified:
+            if occurrences > 0:
+                return text == pattern[2], pattern[3:], -1
+            return False, pattern, -1
+        occurrences = max(1, occurrences + 1)
+        return True, pattern, occurrences
+    elif quantifier == "?":
+        # Zero or more quantifier (?)
+        if text == quantified:
+            return True, pattern[2:], 1
+        return text == pattern[2], pattern[3:], 0
+    else:
+        raise ValueError(f"Unsupported quantifier: {quantifier}")
 
 
 def match_pattern(text: str, pattern: str) -> bool:
