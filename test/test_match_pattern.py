@@ -3,7 +3,7 @@ import pytest
 from app.main import Matcher
 
 
-class TestMatchPattern:
+class TestMatch:
     @pytest.mark.parametrize(
         "text, pattern, is_match",
         [
