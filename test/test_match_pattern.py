@@ -62,4 +62,4 @@ class TestMatchPattern:
         ],
     )
     def test_matches(self, text, pattern, is_match):
-        assert Matcher().match_pattern(text, pattern) is is_match
+        assert Matcher(pattern).match(text) is is_match

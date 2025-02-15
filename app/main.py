@@ -5,60 +5,48 @@ import string
 # import pyparsing - available if you need it!
 # import lark - available if you need it!
 
-MatchResult = tuple[bool, str]
-
 
 @dataclass
 class Matcher:
+    pattern: str
     pos: int = 0
     occurrences: int = -1
 
-    def _match_at_pos(
-        self, text: str, pattern: str, quantifier: str | None
-    ) -> MatchResult:
-        print(f"\ntext: {text} | pattern: {pattern} | quantifier: {quantifier}")
+    def _match_at_pos(self, text: str) -> bool:
         if not text:
-            return self._handle_empty_text(pattern)
+            return self._handle_empty_text()
 
-        if pattern.startswith("^"):
-            return self._handle_start_of_string_anchor(text, pattern)
+        if self.pattern.startswith("[") and self.pattern.find("]"):
+            return self._handle_character_groups(text)
 
-        if pattern.startswith("[") and pattern.find("]"):
-            return self._handle_character_groups(text, pattern)
+        if self.pattern.startswith(r"\d") or self.pattern.startswith(r"\w"):
+            return self._handle_character_classes(text)
 
-        if pattern.startswith(r"\d") or pattern.startswith(r"\w"):
-            return self._handle_character_classes(text, pattern, quantifier)
-
-        if quantifier:
-            return self._handle_quantifiers(text, pattern, quantifier)
+        if self._quantifier:
+            return self._handle_quantifiers(text)
 
         # Literal character
-        match = text == pattern[0] if pattern else False
-        return (True, pattern[1:]) if match else (False, pattern)
-
-    def _handle_empty_text(self, pattern: str) -> MatchResult:
-        if not pattern:
-            return True, ""
-        if pattern.endswith("?"):
-            return True, pattern[2:]
-        elif pattern.endswith("+"):
-            return self.occurrences >= 0, pattern[2:]
-        return False, pattern
-
-    def _handle_start_of_string_anchor(self, text: str, pattern: str) -> MatchResult:
-        pattern = pattern.lstrip("^")
-        # Literal match
-        match = text == pattern[0]
+        match = text == self.pattern[0] if self.pattern else False
         if match:
-            return True, pattern[1:]
-        # If there's no match at the start, then short-circuit
-        # the operation by returning an empty pattern
-        return False, ""
+            self.pattern = self.pattern[1:]
+            return True
+        return False
 
-    def _handle_character_groups(self, text: str, pattern: str) -> MatchResult:
-        rest_of_pattern = pattern[pattern.index("]") + 1 :]
+    def _handle_empty_text(self) -> bool:
+        if not self.pattern:
+            return True
+        if self.pattern.endswith("?"):
+            self.pattern = self.pattern[2:]
+            return True
+        elif self.pattern.endswith("+"):
+            self.pattern = self.pattern[2:]
+            return self.occurrences >= 0
+        return False
 
-        chars = pattern[pattern.index("[") + 1 : pattern.index("]")]
+    def _handle_character_groups(self, text: str) -> bool:
+        rest_of_pattern = self.pattern[self.pattern.index("]") + 1 :]
+
+        chars = self.pattern[self.pattern.index("[") + 1 : self.pattern.index("]")]
         if chars.startswith("^"):
             # Negative characters group
             chars = chars.strip("^")
@@ -66,108 +54,121 @@ class Matcher:
         else:
             # Positive character group
             match = text in chars
-        return (True, rest_of_pattern) if match else (False, "")
 
-    def _handle_character_classes(
-        self, text: str, pattern: str, quantifier: str | None
-    ) -> MatchResult:
-        is_digit = pattern.startswith(r"\d")
+        if match:
+            self.pattern = rest_of_pattern
+            return True
+        self.pattern = ""
+        return False
+
+    def _handle_character_classes(self, text: str) -> bool:
+        is_digit = self.pattern.startswith(r"\d")
         valid_chars = (
             string.digits if is_digit else (string.digits + string.ascii_letters)
         )
         character_class = r"\d" if is_digit else r"\w"
         match = text in valid_chars
 
-        if quantifier == "+":
+        if self._quantifier == "+":
             if not match:
                 self.occurrences = -1
                 if self.occurrences > 0:
-                    return True, pattern.replace(character_class, "")
-                return False, pattern
+                    self.pattern = self.pattern.replace(character_class, "")
+                    return True
+                return False
             self.occurrences = max(1, self.occurrences + 1)
-            return True, pattern
-        elif quantifier == "?":
+            return True
+        elif self._quantifier == "?":
             if match:
                 self.occurrences = 1
-                return True, pattern.replace(character_class, "", 1)
+                self.pattern = self.pattern.replace(character_class, "", 1)
+                return True
             self.occurrences = 0
-            return True, pattern.replace(character_class, "", 1)
+            self.pattern = self.pattern.replace(character_class, "", 1)
+            return True
 
         if match:
-            return True, pattern.replace(character_class, "", 1)
-        return False, pattern
+            self.pattern = self.pattern.replace(character_class, "", 1)
+            return True
+        return False
 
-    def _handle_quantifiers(
-        self, text: str, pattern: str, quantifier: str | None
-    ) -> MatchResult:
-        quantified = pattern[0]
-        if quantifier == "+":
+    def _handle_quantifiers(self, text: str) -> bool:
+        quantified = self.pattern[0]
+        if self._quantifier == "+":
             # One or more quantifier (+)
             if not text == quantified:
                 if self.occurrences >= 0:
-
-                    return (True, pattern[3:]) if text == pattern[2] else (False, "")
+                    if text == self.pattern[2]:
+                        self.pattern = self.pattern[3:]
+                        return True
+                    self.pattern = ""
+                    return False
                 self.occurrences = -1
-                return False, pattern[1:]
+                self.pattern = self.pattern[1:]
+                return False
             self.occurrences = max(1, self.occurrences + 1)
-            return True, pattern
-        elif quantifier == "?":
+            return True
+        elif self._quantifier == "?":
             # Zero or more quantifier (?)
             if text == quantified:
                 self.occurrences = 1
-                return True, pattern[2:]
+                self.pattern = self.pattern[2:]
+                return True
             self.occurrences = 0
-            return text == pattern[2], pattern[3:]
+            match = text == self.pattern[2]
+            self.pattern = self.pattern[3:]
+            return match
         else:
-            raise ValueError(f"Unsupported quantifier: {quantifier}")
+            raise ValueError(f"Unsupported quantifier: {self._quantifier}")
 
-    def match_pattern(self, text: str, pattern: str) -> bool:
+    def _handle_start_of_string_anchor(self, text: str, has_end_anchor: bool) -> bool:
+        for i in range(len(self.pattern)):
+            if i >= len(text):
+                return False
+
+            match = self._match_at_pos(text[i])
+            if not match:
+                return False
+        if not has_end_anchor:
+            return True
+        return match and i + 1 == len(text)
+
+    def _handle_end_of_string_anchor(self, text: str) -> bool:
+        # Flip things around if there's just an end anchor
+        if len(text) < len(self.pattern):
+            return False
+        end_portion = text[-len(self.pattern) :]
+        return Matcher(f"^{self.pattern}").match(end_portion)
+
+    def match(self, text: str) -> bool:
         # Keep track of anchors
-        has_start_anchor = pattern.startswith("^")
-        has_end_anchor = pattern.endswith("$")
+        has_start_anchor = self.pattern.startswith("^")
+        has_end_anchor = self.pattern.endswith("$")
 
         # And strip them for processing
-        pattern = pattern.strip("^$")
+        self.pattern = self.pattern.strip("^$")
 
         if has_start_anchor:
-            for i in range(len(pattern)):
-                if i >= len(text):
-                    return False
+            return self._handle_start_of_string_anchor(text, has_end_anchor)
 
-                quantifier = self._get_quantifier(pattern)
-                match, new_pattern = self._match_at_pos(
-                    text[i], pattern[i:], quantifier
-                )
-                if not match:
-                    return False
-            if not has_end_anchor:
-                return True
-            return len(text) == len(pattern)
-
-        # Flip things around if there's just an end anchor
         if has_end_anchor and not has_start_anchor:
-            if len(text) < len(pattern):
-                return False
-            end_portion = text[-len(pattern) :]
-            return self.match_pattern(end_portion, f"^{pattern}")
+            return self._handle_end_of_string_anchor(text)
 
         while True:
+            previous_pattern = self.pattern
+
             text_at_pos = text[self.pos] if self.pos < len(text) else ""
+            match = self._match_at_pos(text_at_pos)
 
-            quantifier = self._get_quantifier(pattern)
-            match, new_pattern = self._match_at_pos(text_at_pos, pattern, quantifier)
-            print(match)
-
-            # If we're counting the optional quantifier,
+            # If we're still counting the optional quantifier,
             # we can't consume our input string or else
             # we won't be able to check for the empty case
-            if quantifier == "?" and new_pattern == pattern:
+            if self._quantifier == "?" and previous_pattern == self.pattern:
                 continue
 
-            pattern = new_pattern
             # If there's still a pattern to consume
             # it means we don't have a match yet
-            if not pattern:
+            if not self.pattern:
                 return match
 
             self.pos += 1
@@ -175,7 +176,9 @@ class Matcher:
                 break
         return match
 
-    def _get_quantifier(self, pattern: str) -> str | None:
+    @property
+    def _quantifier(self) -> str | None:
+        pattern = self.pattern
         if pattern.startswith(r"\d") or pattern.startswith(r"\w"):
             # There's an extra backslash used to escape in this case, remove it
             pattern = pattern[1:]
@@ -190,7 +193,7 @@ def main():
     pattern = sys.argv[2]
     text = sys.stdin.read()
 
-    match = Matcher().match_pattern(text, pattern)
+    match = Matcher(pattern).match(text)
 
     if not match:
         print("not found!")
