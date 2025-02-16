@@ -17,11 +17,13 @@ class TestMatch:
             ("cat", "^cat", True),
             ("scatter", "^cat", False),
             ("the cat", "^cat", False),
+            ("ct", "^cat", False),
             #
             # # End of string anchor ($)
             ("cat", "cat$", True),
             ("dogdogdog", "dog$", True),
             ("the cat", "cat$", True),
+            ("ct", "cat$", False),
             ("cats", "cat$", False),
             #
             # # Both anchors
@@ -47,10 +49,19 @@ class TestMatch:
             # # Character classes (\d, \w)
             ("a1b", r"\d", True),
             ("abc", r"\d", False),
+            ("abc", r"\d+", False),
             ("123", r"\d+", True),
+            ("a1b", r"\d+", True),
+            ("a1b", r"\d?", True),
+            ("0", r"\d?", True),
             ("a1b", r"\w+", True),
             ("!@#", r"\w", False),
             ("!@#", r"\w?", True),
+            ("cat", r"c\w?t", True),
+            ("caaat", r"c\w+t", True),
+            ("caa?t", r"c\w+t", False),
+            ("caaat", r"c\w?t", True),
+            ("caaa!t", r"c\w?t", False),
             #
             # # Character groups []
             ("a", "[abcd]", True),

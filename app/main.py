@@ -36,14 +36,12 @@ class Matcher:
         return False
 
     def _handle_empty_text(self) -> bool:
-        if not self.pattern:
-            return True
         if self.pattern.endswith("?"):
             self.pattern = self.pattern[2:]
             return True
         elif self.pattern.endswith("+"):
             self.pattern = self.pattern[2:]
-            return self.occurrences >= 0
+            return self.occurrences > 0
         return False
 
     def _handle_character_groups(self, text: str) -> bool:
@@ -75,20 +73,43 @@ class Matcher:
         if self._quantifier == "+":
             if not match:
                 self.occurrences = -1
-                if self.occurrences > 0:
-                    self.pattern = self.pattern.replace(character_class, "")
-                    return True
                 return False
+
+            lookahead = (
+                self.pattern[self.pattern.index("+") + 1]
+                if len(self.pattern) > self.pattern.index("+") + 1
+                else None
+            )
+            if text == lookahead:
+                self.pattern = self.pattern.replace(character_class, "", 1).replace(
+                    "+", "", 1
+                )
+                return self._match_at_pos(text)
+
             self.occurrences = max(1, self.occurrences + 1)
             return True
         elif self._quantifier == "?":
             if match:
                 self.occurrences = 1
-                self.pattern = self.pattern.replace(character_class, "", 1)
+                lookahead = (
+                    self.pattern[self.pattern.index("?") + 1]
+                    if len(self.pattern) > self.pattern.index("?") + 1
+                    else None
+                )
+                if text == lookahead:
+                    self.pattern = self.pattern.replace(character_class, "", 1).replace(
+                        "?", "", 1
+                    )
+                    return self._match_at_pos(text)
+                return True
+
+            if self.occurrences == -1:
+                self.pattern = self.pattern.replace(character_class, "", 1).replace(
+                    "?", "", 1
+                )
                 return True
             self.occurrences = 0
-            self.pattern = self.pattern.replace(character_class, "", 1)
-            return True
+            return False
 
         if match:
             self.pattern = self.pattern.replace(character_class, "", 1)
@@ -100,7 +121,6 @@ class Matcher:
         if self._quantifier == "+":
             # One or more quantifier (+)
             if text != quantified:
-
                 if self.occurrences >= 0:
                     if text == self.pattern[2]:
                         self.pattern = self.pattern[3:]
@@ -122,14 +142,11 @@ class Matcher:
             match = text == self.pattern[2]
             self.pattern = self.pattern[3:]
             return match
-        else:
-            raise ValueError(f"Unsupported quantifier: {self._quantifier}")
+
+        raise ValueError("Expected quantifier to be present")
 
     def _handle_start_of_string_anchor(self, text: str, has_end_anchor: bool) -> bool:
         for i in range(len(self.pattern)):
-            if i >= len(text):
-                return False
-
             match = self._match_at_pos(text[i])
             if not match:
                 return False
@@ -164,16 +181,13 @@ class Matcher:
             return self._handle_end_of_string_anchor(text)
 
         while True:
-            previous_pattern = self.pattern
-
+            quantifier = self._quantifier
             text_at_pos = text[self.pos] if self.pos < len(text) else ""
             match = self._match_at_pos(text_at_pos)
+            print(match)
 
-            # If we're still counting the optional quantifier,
-            # we can't consume our input string or else
-            # we won't be able to check for the empty case
-            if self._quantifier == "?" and previous_pattern == self.pattern:
-                continue
+            if quantifier and not match:
+                self.pattern = self.pattern.replace(quantifier, "")
 
             # If there's still a pattern to consume
             # it means we don't have a match yet
