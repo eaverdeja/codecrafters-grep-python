@@ -22,11 +22,13 @@ class Matcher:
         if has_end_anchor and not has_start_anchor:
             return self._handle_end_of_string_anchor(text)
 
-        if self.pattern.find("(") >= 0 and self.pattern.find(")"):
-            match, found = self._handle_alternation(text)
-            if not match:
-                return False
-            text = text.replace(found, "")
+        num_groups = self.pattern.count("(")
+        for _ in range(1, num_groups + 1):
+            if self.pattern.find("(") >= 0 and self.pattern.find(")"):
+                match, found = self._handle_alternation(text)
+                if not match:
+                    return False
+                text = text.replace(found, "")
 
         while True:
             quantifier = self._quantifier
@@ -212,6 +214,26 @@ class Matcher:
                 + self.pattern[self.pattern.find(")") + 1 :]
             )
         return match, candidate
+
+    def _handle_backreference(self, text: str) -> bool:
+        backreference = self.pattern[
+            self.pattern.index("(") + 1 : self.pattern.index(")")
+        ]
+
+        matcher = Matcher(backreference)
+        match = matcher.match(text)
+
+        if match:
+            if backreference.startswith(r"\d") or backreference.startswith(r"\w"):
+                # Hackish way to get the captured element
+                captured = text[0 : matcher.pos - 1]
+                self.pattern = self.pattern.replace(backreference, captured)
+                backreference = captured
+
+            self.pattern = self.pattern.replace(r"\1", backreference)
+            self.pattern = self.pattern.replace("(", "", 1).replace(")", "", 1)
+
+        return match
 
     def _handle_wildcard(self) -> bool:
         # Anything goes!
