@@ -1,6 +1,6 @@
 import pytest
 
-from app.main import Matcher
+from app.matcher import Matcher
 
 
 class TestMatch:
@@ -76,6 +76,13 @@ class TestMatch:
             ("goøö0Ogol", "g.+gol", True),
             ("car", "c.t", False),
             ("gol", "g.+gol", False),
+            #
+            # # Alternation (|)
+            ("cat", "(cat|dog)", True),
+            ("dog", "(cat|dog)", True),
+            ("duck", "(cat|dog)", False),
+            ("a cat", "a (cat|dog)", True),
+            ("one dog", "a (cat|dog)", False),
         ],
     )
     def test_matches(self, text, pattern, is_match):
