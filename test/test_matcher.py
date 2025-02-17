@@ -70,6 +70,7 @@ class TestMatch:
             ("bat", "[cd]at", False),
             ("cat", "[^cd]at", False),
             ("bat", "[^cd]at", True),
+            ("abcd", "[abcd]+", True),
             #
             # # Wildcards (.)
             ("cat", "c.t", True),
@@ -83,6 +84,39 @@ class TestMatch:
             ("duck", "(cat|dog)", False),
             ("a cat", "a (cat|dog)", True),
             ("one dog", "a (cat|dog)", False),
+            ("dog and cats", "(dog|cat) and (dog|cat)s", True),
+            #
+            # # Backreferences
+            ("cat and cat", r"(cat) and \1", True),
+            ("cat and cat", r"(\w+) and \1", True),
+            ("dog and dog", r"(\w+) and \1", True),
+            ("cat and dog", r"(cat) and \1", False),
+            ("cat and dog", r"(\w+) and \1", False),
+            ("abcd is abcd", r"([abcd]+) is \1", True),
+            ("abcd is abcd, not efg", r"([abcd]+) is \1, not [^xyz]+", True),
+            ("abcd is abcd, not xyz", r"([abcd]+) is \1, not [^xyz]+", False),
+            (
+                "grep 101 is doing grep 101 times",
+                r"(\w\w\w\w \d\d\d) is doing \1 times",
+                True,
+            ),
+            (
+                "$?! 101 is doing $?! 101 times",
+                r"(\w\w\w \d\d\d) is doing \1 times",
+                False,
+            ),
+            #
+            # # Multiple backreferences
+            (
+                "3 red squares and 3 red circles",
+                r"(\d+) (\w+) squares and \1 \2 circles",
+                True,
+            ),
+            (
+                "3 red squares and 4 red circles",
+                r"(\d+) (\w+) squares and \1 \2 circles",
+                False,
+            ),
         ],
     )
     def test_matches(self, text, pattern, is_match):
