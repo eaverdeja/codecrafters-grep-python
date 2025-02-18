@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+import math
 import string
+from typing import Any
 
 
 @dataclass
@@ -8,14 +10,34 @@ class Matcher:
     pos: int = 0
     occurrences: int = -1
     current_capture: str = ""
+    debug: bool = False
 
     def match(self, text: str) -> bool:
-        # Keep track of anchors
         has_start_anchor = self.pattern.startswith("^")
         has_end_anchor = self.pattern.endswith("$")
-
-        # And strip them for processing
         self.pattern = self.pattern.strip("^$")
+
+        num_groups = self.pattern.count("(")
+        capture_text = text
+        alternation_text = text
+        for i in range(1, num_groups + 1):
+            self._debug(f"\nProcessing group [{i}]")
+            opening = self.pattern.find("(")
+            closing = self.pattern.find(")")
+            if opening >= 0 and closing:
+                if opening < self.pattern.find("|") < closing:
+                    match, found = self._handle_alternation(alternation_text)
+                    if not match:
+                        return False
+                    alternation_text = alternation_text.replace(found, "", 1)
+                if self.pattern.find(f"\\{i}") >= 0:
+                    match, capture = self._handle_backreference(capture_text, i)
+                    if not match:
+                        return False
+                    capture_text = capture_text.replace(capture, "")
+                self.pattern = self.pattern.replace("(", "", 1).replace(")", "", 1)
+
+        self._debug("resulting pattern", self.pattern)
 
         if has_start_anchor:
             return self._handle_start_of_string_anchor(text, has_end_anchor)
@@ -23,39 +45,16 @@ class Matcher:
         if has_end_anchor and not has_start_anchor:
             return self._handle_end_of_string_anchor(text)
 
-        num_groups = self.pattern.count("(")
-        capture_text = text
-        for i in range(1, num_groups + 1):
-            opening = self.pattern.find("(")
-            closing = self.pattern.find(")")
-            if opening >= 0 and closing:
-                if opening < self.pattern.find("|") < closing:
-                    match, found = self._handle_alternation(text)
-                    if not match:
-                        return False
-                    text = text.replace(found, "")
-                else:
-                    match, capture = self._handle_backreference(capture_text, i)
-                    print("capture", capture)
-                    if not match:
-                        return False
-                    capture_text = capture_text.replace(capture, "").strip()
-
-        print("resulting pattern", self.pattern)
-
         has_matched_once = False
         while True:
-            quantifier = self._quantifier
             text_at_pos = text[self.pos] if self.pos < len(text) else ""
             match = self._match_at_pos(text_at_pos)
             if match:
                 has_matched_once = True
 
-            if has_matched_once and not match and not quantifier:
-                print("matched once and failed! breaking")
+            if has_matched_once and not match:
+                self._debug("matched once and failed! breaking")
                 break
-            if quantifier and not match:
-                self.pattern = self.pattern.replace(quantifier, "")
 
             if not self.pattern:
                 return match
@@ -67,8 +66,8 @@ class Matcher:
         return match
 
     def _match_at_pos(self, text: str) -> bool:
-        print("--- | text | pattern ")
-        print("---    ", text, " | ", self.pattern)
+        self._debug("--- | text | pattern ")
+        self._debug("---    ", text, " | ", self.pattern)
         if not text:
             return self._handle_empty_text()
 
@@ -78,16 +77,35 @@ class Matcher:
         if self.pattern.startswith(r"\d") or self.pattern.startswith(r"\w"):
             match = self._handle_character_classes(text)
             if match:
-                if self._quantifier and self.occurrences >= 0:
+                if self._quantifier and self.occurrences == -1:
+                    self._consume_pattern(3)
+                elif self._quantifier and self.occurrences >= 0:
                     self.current_capture += text
                 elif not self._quantifier:
                     self.current_capture += text
+            elif self._quantifier:
+                if self._quantifier == "+" and self.occurrences > 0:
+                    self._consume_pattern(3)
+                    if not self.pattern:
+                        return True
+                    return False
+                elif self._quantifier == "?":
+                    self.pattern = self.pattern.replace(self._quantifier, "")
+                self.occurrences = -1
             return match
 
         if self._quantifier:
-            return self._handle_quantifiers(text)
+            match = self._handle_quantifiers(text)
+            if not match:
+                if self._quantifier == "+" and self.occurrences > 0:
+                    self._consume_pattern(3)
+                if self._quantifier == "?":
+                    self.pattern = self.pattern.replace(self._quantifier, "")
+                self.occurrences = -1
+            return match
 
         if self.pattern.startswith("."):
+            self.current_capture += text
             return self._handle_wildcard()
 
         # Literal character
@@ -149,7 +167,6 @@ class Matcher:
 
         if self._quantifier == "+":
             if not match:
-                self.occurrences = -1
                 return False
 
             matched_lookahead = self._handle_lookahead(text, character_class)
@@ -159,23 +176,21 @@ class Matcher:
             self.occurrences = max(1, self.occurrences + 1)
             return True
         elif self._quantifier == "?":
-            if match:
+            if match and self.occurrences == -1:
                 self.occurrences = 1
 
                 matched_lookahead = self._handle_lookahead(text, character_class)
                 if matched_lookahead is not None:
                     return matched_lookahead
 
+                self._consume_pattern(3)
                 return True
 
             if self.occurrences == -1:
-                self.pattern = self.pattern.replace(character_class, "", 1).replace(
-                    "?", "", 1
-                )
+                self._consume_pattern(3)
                 return True
-            self.occurrences = 0
-            return False
 
+            return False
         if match:
             self.pattern = self.pattern.replace(character_class, "", 1)
             return True
@@ -193,25 +208,21 @@ class Matcher:
                 if self.occurrences >= 0:
                     self.pattern = ""
                     return False
-                self.occurrences = -1
                 self._consume_pattern(2)
                 return False
             self.occurrences = max(1, self.occurrences + 1)
             return True
         elif self._quantifier == "?":
-            # Zero or more quantifier (?)
+            # Zero or one quantifier (?)
             # Lookahead
             match = text == self.pattern[2]
             if match:
                 self._consume_pattern(3)
                 return True
-            if text == quantified:
+            if text == quantified and self.occurrences == -1:
                 self.occurrences = 1
-                # self._consume_pattern(2)
                 return True
-            self.occurrences = 0
-
-            return match
+            return False
 
         raise ValueError("Expected quantifier to be present")
 
@@ -235,17 +246,27 @@ class Matcher:
         candidates = self.pattern[self.pattern.index("(") + 1 : self.pattern.index(")")]
 
         match = False
+        capture = ""
+        matches = []
         for candidate in candidates.split("|"):
-            match = Matcher(candidate).match(text)
-            if match:
-                break
+            self._debug(f"Looking for candidate [{candidate}] in [{text}]")
+            matcher = Matcher(candidate)
+            did_match = matcher.match(text)
+            matches.append((did_match, matcher.pos, matcher.current_capture))
+
+        last_pos = math.inf
+        self._debug("Matches", matches)
+        for did_match, pos, current_capture in matches:
+            if did_match and pos < last_pos:
+                match = did_match
+                capture = current_capture
+                last_pos = pos
 
         if match:
-            self.pattern = (
-                self.pattern[: self.pattern.find("(")]
-                + self.pattern[self.pattern.find(")") + 1 :]
-            )
-        return match, candidate
+            self._debug(f"Found match: [{capture}]")
+            group = self.pattern[self.pattern.find("(") + 1 : self.pattern.find(")")]
+            self.pattern = self.pattern.replace(group, capture, 1)
+        return match, capture
 
     def _handle_backreference(self, text: str, idx: int) -> tuple[bool, str]:
         backreference = self.pattern[
@@ -253,7 +274,7 @@ class Matcher:
         ]
 
         matcher = Matcher(backreference)
-        print(f"Looking for {backreference} in {text}")
+        self._debug(f"Looking for backreference [{backreference}] in [{text}]")
         match = matcher.match(text)
 
         if match:
@@ -307,3 +328,7 @@ class Matcher:
                 else None
             )
         return pattern[1] if len(pattern) > 1 and pattern[1] in ("+", "?") else None
+
+    def _debug(self, *args: Any) -> None:
+        if self.debug:
+            print(*args)
