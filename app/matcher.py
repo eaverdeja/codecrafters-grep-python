@@ -21,7 +21,7 @@ class Matcher:
         capture_text = text
         alternation_text = text
         for i in range(1, num_groups + 1):
-            self._debug(f"\nProcessing group [{i}]")
+            self._debug(f"\nProcessing group [{i}], pattern [{self.pattern}]")
             opening = self.pattern.find("(")
             closing = self.pattern.find(")")
             if opening >= 0 and closing:
@@ -102,6 +102,7 @@ class Matcher:
                 if self._quantifier == "?":
                     self.pattern = self.pattern.replace(self._quantifier, "")
                 self.occurrences = -1
+            self.current_capture += text
             return match
 
         if self.pattern.startswith("."):
@@ -148,6 +149,14 @@ class Matcher:
                 self.pattern = rest_of_pattern
             return True
         else:
+            if self._quantifier == "+":
+                # lookahead
+                if len(rest_of_pattern) > 0 and text == rest_of_pattern[0]:
+                    self.pattern = rest_of_pattern[1:]
+                    self.occurrences = -1
+                    return True
+                return self.occurrences > 0
+
             self.pattern = rest_of_pattern
             self._consume_pattern(1)
             if self.occurrences > 0:
@@ -203,6 +212,7 @@ class Matcher:
             # Lookahead
             if text == self.pattern[2] and self.occurrences > 0:
                 self._consume_pattern(3)
+                self.occurrences = -1
                 return True
             if text != quantified and quantified != ".":
                 if self.occurrences >= 0:
@@ -222,6 +232,7 @@ class Matcher:
             if text == quantified and self.occurrences == -1:
                 self.occurrences = 1
                 return True
+            print("WAH", text, quantified, self.occurrences)
             return False
 
         raise ValueError("Expected quantifier to be present")
@@ -280,11 +291,12 @@ class Matcher:
         if match:
             if backreference.startswith(r"\d") or backreference.startswith(r"\w"):
                 captured = matcher.current_capture
-                self.pattern = self.pattern.replace(backreference, captured)
+                self.pattern = self.pattern.replace(backreference, captured, 1)
                 backreference = captured
 
             self.pattern = self.pattern.replace(f"\\{idx}", backreference)
-            self.pattern = self.pattern.replace("(", "", 1).replace(")", "", 1)
+            self._debug(f"Replacing [{idx}] with [{backreference}]")
+            self._debug(f"Resulting pattern: {self.pattern}")
 
         return match, matcher.current_capture
 

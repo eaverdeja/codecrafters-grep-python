@@ -117,18 +117,26 @@ class TestMatch:
                 False,
             ),
             ("bugs here and bugs there", r"(b..s|c..e) here and \1 there", True),
+            ("bugz here and bugs there", r"(b..s|c..e) here and \1 there", False),
             #
             # # Multiple backreferences
-            # (
-            #     "3 red squares and 3 red circles",
-            #     r"(\d+) (\w+) squares and \1 \2 circles",
-            #     True,
-            # ),
-            # (
-            #     "3 red squares and 4 red circles",
-            #     r"(\d+) (\w+) squares and \1 \2 circles",
-            #     False,
-            # ),
+            (
+                "3 red squares and 3 red circles",
+                r"(\d+) (\w+) squares and \1 \2 circles",
+                True,
+            ),
+            (
+                "3 red squares and 4 red circles",
+                r"(\d+) (\w+) squares and \1 \2 circles",
+                False,
+            ),
+            (
+                "abc-def is abc-def, not efg",
+                r"([abc]+)-([def]+) is \1-\2, not [^xyz]+",
+                True,
+            ),
+            ("apple pie, apple and pie", r"^(\w+) (\w+), \1 and \2$", True),
+            ("howwdy hey there, howwdy hey", r"(how+dy) (he?y) there, \1 \2", True),
         ],
     )
     def test_matches(self, text, pattern, is_match):
