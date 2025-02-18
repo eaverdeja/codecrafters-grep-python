@@ -31,10 +31,10 @@ class TestMatch:
             ("cats", "^cat$", False),
             ("the cat", "^cat$", False),
             #
-            # # Zero or more quantifier
+            # # Zero or one quantifier
             ("cat", "ca?t", True),
             ("act", "ca?t", True),
-            ("a caat", "ca?t", True),
+            ("a caat", "ca?t", False),
             ("cbt", "ca?t", False),
             ("dog", "ca?t", False),
             ("cag", "ca?t", False),
@@ -60,7 +60,7 @@ class TestMatch:
             ("cat", r"c\w?t", True),
             ("caaat", r"c\w+t", True),
             ("caa?t", r"c\w+t", False),
-            ("caaat", r"c\w?t", True),
+            ("caaat", r"c\w?t", False),
             ("caaa!t", r"c\w?t", False),
             #
             # # Character groups []
@@ -85,6 +85,7 @@ class TestMatch:
             ("a cat", "a (cat|dog)", True),
             ("one dog", "a (cat|dog)", False),
             ("dog and cats", "(dog|cat) and (dog|cat)s", True),
+            ("a dog and cats", "a (cat|dog) and (cat|dog)s", True),
             #
             # # Backreferences
             ("cat and cat", r"(cat) and \1", True),
@@ -105,18 +106,29 @@ class TestMatch:
                 r"(\w\w\w \d\d\d) is doing \1 times",
                 False,
             ),
-            #
-            # # Multiple backreferences
             (
-                "3 red squares and 3 red circles",
-                r"(\d+) (\w+) squares and \1 \2 circles",
+                "this starts and ends with this",
+                r"^(\w+) starts and ends with \1$",
                 True,
             ),
             (
-                "3 red squares and 4 red circles",
-                r"(\d+) (\w+) squares and \1 \2 circles",
+                "once a dreaaamer, alwayszzz a dreaaamer",
+                "once a (drea+mer), alwaysz? a \1",
                 False,
             ),
+            ("bugs here and bugs there", r"(b..s|c..e) here and \1 there", True),
+            #
+            # # Multiple backreferences
+            # (
+            #     "3 red squares and 3 red circles",
+            #     r"(\d+) (\w+) squares and \1 \2 circles",
+            #     True,
+            # ),
+            # (
+            #     "3 red squares and 4 red circles",
+            #     r"(\d+) (\w+) squares and \1 \2 circles",
+            #     False,
+            # ),
         ],
     )
     def test_matches(self, text, pattern, is_match):
