@@ -232,7 +232,6 @@ class Matcher:
             if text == quantified and self.occurrences == -1:
                 self.occurrences = 1
                 return True
-            print("WAH", text, quantified, self.occurrences)
             return False
 
         raise ValueError("Expected quantifier to be present")
