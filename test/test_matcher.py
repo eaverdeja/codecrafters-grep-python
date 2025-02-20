@@ -137,6 +137,23 @@ class TestMatch:
             ),
             ("apple pie, apple and pie", r"^(\w+) (\w+), \1 and \2$", True),
             ("howwdy hey there, howwdy hey", r"(how+dy) (he?y) there, \1 \2", True),
+            #
+            # # Nested backreferences
+            (
+                "'cat and cat' is the same as 'cat and cat'",
+                r"('(cat) and \2') is the same as \1",
+                True,
+            ),
+            (
+                "grep 101 is doing grep 101 times, and again grep 101 times",
+                r"((\w\w\w\w) (\d\d\d)) is doing \2 \3 times, and again \1 times",
+                True,
+            ),
+            (
+                "'howwdy hey there' is made up of 'howwdy' and 'hey'. howwdy hey there",
+                r"'((how+dy) (he?y) there)' is made up of '\2' and '\3'. \1",
+                True,
+            ),
         ],
     )
     def test_matches(self, text, pattern, is_match):

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import math
 import string
+import sys
 from typing import Any
 
 
@@ -18,26 +19,43 @@ class Matcher:
         self.pattern = self.pattern.strip("^$")
 
         num_groups = self.pattern.count("(")
-        capture_text = text
         alternation_text = text
-        for i in range(1, num_groups + 1):
-            self._debug(f"\nProcessing group [{i}], pattern [{self.pattern}]")
-            opening = self.pattern.find("(")
-            closing = self.pattern.find(")")
-            if opening >= 0 and closing:
-                if opening < self.pattern.find("|") < closing:
-                    match, found = self._handle_alternation(alternation_text)
-                    if not match:
-                        return False
-                    alternation_text = alternation_text.replace(found, "", 1)
-                if self.pattern.find(f"\\{i}") >= 0:
-                    match, capture = self._handle_backreference(capture_text, i)
-                    if not match:
-                        return False
-                    capture_text = capture_text.replace(capture, "")
-                self.pattern = self.pattern.replace("(", "", 1).replace(")", "", 1)
+        original_parentheses = self._find_matching_parentheses(self.pattern)
+        parentheses_map = {
+            idx + 1: (opening, closing)
+            for idx, (opening, closing) in enumerate(original_parentheses)
+        }
+        sorted_parentheses = sorted(parentheses_map.items(), key=lambda p: p[1][1])
+        for idx, _ in sorted_parentheses:
+            parentheses = self._find_matching_parentheses(self.pattern)
+            opening, closing = self._find_next_parentheses_pair(parentheses)
+            if not opening >= 0 or not closing:
+                continue
 
-        self._debug("resulting pattern", self.pattern)
+            self._debug(f"\nProcessing group [{idx}], pattern [{self.pattern}]")
+            self._debug(f"Opening: [{opening}] | Closing: [{closing}]")
+            if opening < self.pattern.find("|") < closing:
+                match, found = self._handle_alternation(alternation_text)
+                if not match:
+                    return False
+                alternation_text = alternation_text.replace(found, "", 1)
+            if self.pattern.find(f"\\{idx}") >= 0:
+                nested = False
+                for p in sorted_parentheses:
+                    if p[0] < idx:
+                        nested = opening < p[1][1]
+                offset = 0 if not nested else 1
+                match = self._handle_backreference(text[opening - offset :], idx)
+                if not match:
+                    return False
+
+            parentheses = self._find_matching_parentheses(self.pattern)
+            opening, closing = self._find_next_parentheses_pair(parentheses)
+            self.pattern = self.pattern[:opening] + self.pattern[opening + 1 :]
+            self.pattern = self.pattern[: closing - 1] + self.pattern[closing:]
+
+        if num_groups:
+            self._debug("resulting pattern", self.pattern)
 
         if has_start_anchor:
             return self._handle_start_of_string_anchor(text, has_end_anchor)
@@ -48,11 +66,12 @@ class Matcher:
         has_matched_once = False
         while True:
             text_at_pos = text[self.pos] if self.pos < len(text) else ""
+            quantifier = self._quantifier
             match = self._match_at_pos(text_at_pos)
             if match:
                 has_matched_once = True
 
-            if has_matched_once and not match:
+            if quantifier and has_matched_once and not match:
                 self._debug("matched once and failed! breaking")
                 break
 
@@ -90,7 +109,8 @@ class Matcher:
                         return True
                     return False
                 elif self._quantifier == "?":
-                    self.pattern = self.pattern.replace(self._quantifier, "")
+                    if self.occurrences == 1:
+                        self._consume_pattern(3)
                 self.occurrences = -1
             return match
 
@@ -185,14 +205,12 @@ class Matcher:
             self.occurrences = max(1, self.occurrences + 1)
             return True
         elif self._quantifier == "?":
+            matched_lookahead = self._handle_lookahead(text, character_class)
+            if matched_lookahead is not None:
+                return matched_lookahead
+
             if match and self.occurrences == -1:
                 self.occurrences = 1
-
-                matched_lookahead = self._handle_lookahead(text, character_class)
-                if matched_lookahead is not None:
-                    return matched_lookahead
-
-                self._consume_pattern(3)
                 return True
 
             if self.occurrences == -1:
@@ -253,7 +271,9 @@ class Matcher:
         return Matcher(f"^{self.pattern}").match(end_portion)
 
     def _handle_alternation(self, text: str) -> tuple[bool, str]:
-        candidates = self.pattern[self.pattern.index("(") + 1 : self.pattern.index(")")]
+        parentheses = self._find_matching_parentheses(self.pattern)
+        opening, closing = self._find_next_parentheses_pair(parentheses)
+        candidates = self.pattern[opening + 1 : closing]
 
         match = False
         capture = ""
@@ -265,7 +285,6 @@ class Matcher:
             matches.append((did_match, matcher.pos, matcher.current_capture))
 
         last_pos = math.inf
-        self._debug("Matches", matches)
         for did_match, pos, current_capture in matches:
             if did_match and pos < last_pos:
                 match = did_match
@@ -274,14 +293,16 @@ class Matcher:
 
         if match:
             self._debug(f"Found match: [{capture}]")
-            group = self.pattern[self.pattern.find("(") + 1 : self.pattern.find(")")]
+            parentheses = self._find_matching_parentheses(self.pattern)
+            opening, closing = self._find_next_parentheses_pair(parentheses)
+            group = self.pattern[opening + 1 : closing]
             self.pattern = self.pattern.replace(group, capture, 1)
         return match, capture
 
-    def _handle_backreference(self, text: str, idx: int) -> tuple[bool, str]:
-        backreference = self.pattern[
-            self.pattern.index("(") + 1 : self.pattern.index(")")
-        ]
+    def _handle_backreference(self, text: str, idx: int) -> bool:
+        parentheses = self._find_matching_parentheses(self.pattern)
+        opening, closing = self._find_next_parentheses_pair(parentheses)
+        backreference = self.pattern[opening + 1 : closing]
 
         matcher = Matcher(backreference)
         self._debug(f"Looking for backreference [{backreference}] in [{text}]")
@@ -293,11 +314,11 @@ class Matcher:
                 self.pattern = self.pattern.replace(backreference, captured, 1)
                 backreference = captured
 
-            self.pattern = self.pattern.replace(f"\\{idx}", backreference)
+            self.pattern = self.pattern.replace(f"\\{idx}", backreference, 1)
             self._debug(f"Replacing [{idx}] with [{backreference}]")
             self._debug(f"Resulting pattern: {self.pattern}")
 
-        return match, matcher.current_capture
+        return match
 
     def _handle_wildcard(self) -> bool:
         # Anything goes!
@@ -324,6 +345,30 @@ class Matcher:
     def _consume_pattern(self, n: int) -> None:
         self.pattern = self.pattern[n:]
 
+    def _find_matching_parentheses(self, text: str) -> list[tuple[int, int]]:
+        stack = []
+        matches = []
+        for i, char in enumerate(text):
+            if char == "(":
+                stack.append(i)
+            elif char == ")":
+                opening_index = stack.pop()
+                matches.append((opening_index, i))
+
+        matches.sort(key=lambda x: x[0])
+        return matches
+
+    def _find_next_parentheses_pair(
+        self,
+        current_parentheses: list[tuple[int, int]],
+    ) -> tuple[int, int]:
+        opening, closing = -sys.maxsize, sys.maxsize
+        for o, c in current_parentheses:
+            if c < closing:
+                opening = o
+                closing = c
+        return opening, closing
+
     @property
     def _quantifier(self) -> str | None:
         pattern = self.pattern
@@ -339,6 +384,10 @@ class Matcher:
                 else None
             )
         return pattern[1] if len(pattern) > 1 and pattern[1] in ("+", "?") else None
+
+    def _is_clean_pattern(self, pattern: str) -> bool:
+        special_chars = [r"\w", r"\d", r"\1", r"\2", r"\3", "(", ")", "|", "?", "+"]
+        return all(char not in pattern for char in special_chars)
 
     def _debug(self, *args: Any) -> None:
         if self.debug:
