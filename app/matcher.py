@@ -385,10 +385,6 @@ class Matcher:
             )
         return pattern[1] if len(pattern) > 1 and pattern[1] in ("+", "?") else None
 
-    def _is_clean_pattern(self, pattern: str) -> bool:
-        special_chars = [r"\w", r"\d", r"\1", r"\2", r"\3", "(", ")", "|", "?", "+"]
-        return all(char not in pattern for char in special_chars)
-
     def _debug(self, *args: Any) -> None:
         if self.debug:
             print(*args)
