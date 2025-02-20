@@ -29,9 +29,6 @@ class Matcher:
         for idx, _ in sorted_parentheses:
             parentheses = self._find_matching_parentheses(self.pattern)
             opening, closing = self._find_next_parentheses_pair(parentheses)
-            if not opening >= 0 or not closing:
-                continue
-
             self._debug(f"\nProcessing group [{idx}], pattern [{self.pattern}]")
             self._debug(f"Opening: [{opening}] | Closing: [{closing}]")
             if opening < self.pattern.find("|") < closing:
@@ -96,9 +93,7 @@ class Matcher:
         if self.pattern.startswith(r"\d") or self.pattern.startswith(r"\w"):
             match = self._handle_character_classes(text)
             if match:
-                if self._quantifier and self.occurrences == -1:
-                    self._consume_pattern(3)
-                elif self._quantifier and self.occurrences >= 0:
+                if self._quantifier and self.occurrences >= 0:
                     self.current_capture += text
                 elif not self._quantifier:
                     self.current_capture += text
@@ -117,8 +112,6 @@ class Matcher:
         if self._quantifier:
             match = self._handle_quantifiers(text)
             if not match:
-                if self._quantifier == "+" and self.occurrences > 0:
-                    self._consume_pattern(3)
                 if self._quantifier == "?":
                     self.pattern = self.pattern.replace(self._quantifier, "")
                 self.occurrences = -1
@@ -179,9 +172,6 @@ class Matcher:
 
             self.pattern = rest_of_pattern
             self._consume_pattern(1)
-            if self.occurrences > 0:
-                self.occurrences = -1
-                return True
 
         self.pattern = ""
         return False

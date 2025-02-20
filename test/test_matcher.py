@@ -154,6 +154,21 @@ class TestMatch:
                 r"'((how+dy) (he?y) there)' is made up of '\2' and '\3'. \1",
                 True,
             ),
+            (
+                "howwdy heeey there, howwdy heeey",
+                r"(how+dy) (he?y) there, \1 \2",
+                False,
+            ),
+            (
+                "cat and fish, cat with fish, cat and fish",
+                r"((c.t|d.g) and (f..h|b..d)), \2 with \3, \1",
+                True,
+            ),
+            (
+                "bat and fish, bat with fish, bat and fish",
+                r"((c.t|d.g) and (f..h|b..d)), \2 with \3, \1",
+                False,
+            ),
         ],
     )
     def test_matches(self, text, pattern, is_match):
